@@ -1,20 +1,20 @@
 import streamlit as st
-import pandas as pd
+from supabase import create_client, Client
 from datetime import datetime
-import os
+
+# Initialize Supabase client
+@st.cache_resource
+def init_supabase():
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase = init_supabase()
 
 # App title
-st.title("Personal Ledger App")
+st.title("Joint Ledger App (Supabase)")
 
-# Initialize session state for our ledger data
-if 'ledger_data' not in st.session_state:
-    st.session_state.ledger_data = pd.DataFrame(columns=['Date', 'Amount', 'Note'])
-    
-    # Try to load existing data if available
-    if os.path.exists('ledger_data.csv'):
-        st.session_state.ledger_data = pd.read_csv('ledger_data.csv', parse_dates=['Date'])
-
-# Input form in sidebar
+# Input form
 with st.sidebar:
     st.header("Add New Entry")
     with st.form("entry_form"):
@@ -24,34 +24,16 @@ with st.sidebar:
         submitted = st.form_submit_button("Add Entry")
         
         if submitted:
-            new_entry = pd.DataFrame([[date, amount, note]], 
-                                   columns=['Date', 'Amount', 'Note'])
-            st.session_state.ledger_data = pd.concat(
-                [st.session_state.ledger_data, new_entry], 
-                ignore_index=True
-            )
-            # Save to CSV
-            st.session_state.ledger_data.to_csv('ledger_data.csv', index=False)
-            st.success("Entry added successfully!")
+            data = {"date": str(date), "amount": amount, "note": note}
+            supabase.table("ledger").insert(data).execute()
+            st.success("Entry added to shared ledger!")
 
-# Main display area
-st.header("Your Ledger")
-
-# Show the data table
-if not st.session_state.ledger_data.empty:
-    st.dataframe(st.session_state.ledger_data.sort_values('Date', ascending=False))
-    
-    # Show summary statistics
-    st.subheader("Summary")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Total Entries", len(st.session_state.ledger_data))
-    with col2:
-        total_amount = st.session_state.ledger_data['Amount'].sum()
-        st.metric("Total Amount", f"{total_amount:.2f}")
-        
-    # Simple visualization
-    st.subheader("Amount Over Time")
-    st.line_chart(st.session_state.ledger_data.set_index('Date')['Amount'].cumsum())
+# Display entries
+st.header("Shared Ledger")
+entries = supabase.table("ledger").select("*").execute().data
+if entries:
+    st.dataframe(entries)
+    st.metric("Total Entries", len(entries))
+    st.metric("Total Amount", sum(e["amount"] for e in entries))
 else:
-    st.info("No entries yet. Add your first entry using the form in the sidebar.")
+    st.info("No entries yet.")
