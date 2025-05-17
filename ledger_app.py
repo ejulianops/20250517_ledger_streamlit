@@ -24,16 +24,19 @@ with st.sidebar:
         note = st.text_input("Note")
         submitted = st.form_submit_button("Add Entry")
         
-        if submitted:
+        # In your form submission:
+        if submitted and "user" in st.session_state:
             try:
-                data = {"date": str(date), "amount": float(amount), "note": str(note)}
+                data = {
+                    "date": str(date),
+                    "amount": float(amount),
+                    "note": str(note),
+                    "user_id": st.session_state.user.user.id  # This is already UUID
+                }
                 response = supabase.table("ledger").insert(data).execute()
-                if response.data:
-                    st.success("Entry added to shared ledger!")
-                else:
-                    st.error("Failed to add entry")
+                st.success("Entry added!")
             except Exception as e:
-                st.error(f"Error adding entry: {str(e)}")
+                st.error(f"Error: {e}")
 
 # Display entries
 st.header("Shared Ledger")
@@ -62,3 +65,17 @@ try:
         
 except Exception as e:
     st.error(f"Error loading entries: {str(e)}")
+
+# Auth function
+def login():
+    with st.sidebar:
+        st.header("Login")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            try:
+                user = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state.user = user
+                st.rerun()
+            except Exception as e:
+                st.error(f"Login failed: {e}")
